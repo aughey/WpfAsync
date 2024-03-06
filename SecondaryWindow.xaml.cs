@@ -66,6 +66,28 @@ namespace WpfAsync
             return tcs.Task;
         }
 
+        async public Task<bool> StartTestWithTimeout(int timeout_msecs)
+        {
+            using var cts = new CancellationTokenSource();
+            Task delayTask = Task.Delay(timeout_msecs, cts.Token);
+            Task<bool> testTask = this.StartTestAsync(cts.Token);
+
+            var completedTask = await Task.WhenAny(testTask, delayTask);
+
+            cts.Cancel(); // Ensure the test task is canceled if still running
+
+            if (completedTask == testTask && testTask.Status == TaskStatus.RanToCompletion)
+            {
+                // Test completed successfully
+                return true;
+            }
+            else
+            {
+                // Timeout occurred or task was otherwise canceled
+                return false;
+            }
+        }
+
         private void OnTestCompleted()
         {
             receiver.TestCompleted -= OnTestCompleted; // Unsubscribe from event
@@ -114,6 +136,20 @@ namespace WpfAsync
             }
             cts.Cancel(); // Ensure the test task is canceled if still running
 
+            UpdateButton.IsEnabled = true;
+        }
+
+        private async void ActionButton_HandleAsyncInHardware(object sender, RoutedEventArgs e)
+        {
+            DisplayLabel.Content = "Starting test...";
+            UpdateButton.IsEnabled = false;
+
+            if (await externalHardwareAsync.StartTestWithTimeout(500)) {
+                DisplayLabel.Content = "Test completed successfully";
+            } else
+            {
+                DisplayLabel.Content = "Test failed or was canceled";
+            }
             UpdateButton.IsEnabled = true;
         }
     }
